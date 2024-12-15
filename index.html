@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leave Management System</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <h2>Create Leave Period</h2>
+    <form id="createLeavePeriodForm">
+        <label for="periodType">Leave Period Type:</label>
+        <select id="periodType" required>
+            <option value="" disabled selected>Select Leave Period Type</option>
+            <option value="Annual">Annual</option>
+            <option value="Sick">Sick</option>
+            <option value="Casual">Casual</option>
+            <option value="Maternity">Maternity</option>
+        </select><br>
+
+        <label for="startDate">Start Date:</label>
+        <input type="date" id="startDate" placeholder="Start Date" required><br>
+
+        <label for="endDate">End Date:</label>
+        <input type="date" id="endDate" placeholder="End Date" required><br>
+
+        <label for="fiscalYear">Fiscal Year:</label>
+        <select id="fiscalYear" required>
+            <option value="" disabled selected>Select Fiscal Year</option>
+        </select><br>
+
+        <label for="isCurrentPeriod">Current Period:</label>
+        <input type="checkbox" id="isCurrentPeriod"><br>
+
+        <label for="description">Description:</label>
+        <textarea id="description" placeholder="Description"></textarea><br>
+
+        <button type="submit">Create Leave Period</button>
+    </form>
+
+    <!-- Label to display leave balance -->
+    <div id="leaveBalanceContainer">
+        <label id="leaveBalanceLabel" style="display:none;">Leave Balance: 0 days</label>
+    </div>
+
+    <!-- Success message container -->
+    <div id="successMessage" style="display:none; color: green;"></div>
+
+    <script>
+        // Public holidays (example format: MM-DD)
+        const publicHolidays = [
+            "01-01", // New Year's Day
+            "12-25", // Christmas
+            "07-04"  // Independence Day
+        ];
+
+        // Function to check if a date is a public holiday
+        function isPublicHoliday(date) {
+            const holiday = date.toISOString().slice(5, 10); // MM-DD format
+            return publicHolidays.includes(holiday);
+        }
+
+        // Function to calculate the number of leave days
+        function calculateLeaveDays(startDate, endDate) {
+            let totalDays = 0;
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            // Loop through each day between the start and end date
+            for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+                // Check if it's a weekend or a public holiday
+                if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6 && !isPublicHoliday(currentDate)) {
+                    totalDays++;
+                }
+            }
+
+            return totalDays;
+        }
+
+        // Get the current year
+        const currentYear = new Date().getFullYear();
+        const fiscalYearSelect = document.getElementById('fiscalYear');
+
+        // Loop to create options for the last 10 years and the next 10 years
+        for (let i = currentYear - 10; i <= currentYear + 10; i++) {
+            let fiscalYearOption = document.createElement('option');
+            let fiscalYearText = `${i} - ${i + 1}`;
+            fiscalYearOption.value = `${i}-${i + 1}`;
+            fiscalYearOption.textContent = fiscalYearText;
+
+            // Disable past fiscal years
+            if (i < currentYear) {
+                fiscalYearOption.disabled = true;
+            }
+
+            fiscalYearSelect.appendChild(fiscalYearOption);
+        }
+
+        // Wait for the DOM to load
+        window.addEventListener("DOMContentLoaded", function () {
+            // Get the form element
+            const form = document.getElementById("createLeavePeriodForm");
+
+            // Add a submit event listener
+            form.addEventListener("submit", async function (event) {
+                event.preventDefault(); // Prevent the default form submission
+
+                // Collect form data
+                const leavePeriodData = {
+                    periodType: document.getElementById("periodType").value.trim(),
+                    startDate: document.getElementById("startDate").value,
+                    endDate: document.getElementById("endDate").value,
+                    fiscalYear: document.getElementById("fiscalYear").value.trim(),
+                    isCurrentPeriod: document.getElementById("isCurrentPeriod").checked,
+                    description: document.getElementById("description").value.trim()
+                };
+
+                // Validate inputs
+                if (!leavePeriodData.periodType || !leavePeriodData.startDate || !leavePeriodData.endDate || !leavePeriodData.fiscalYear) {
+                    alert("All required fields must be filled out.");
+                    return;
+                }
+
+                if (new Date(leavePeriodData.startDate) >= new Date(leavePeriodData.endDate)) {
+                    alert("Start date must be earlier than end date.");
+                    return;
+                }
+
+                // Calculate the number of leave days
+                const leaveDays = calculateLeaveDays(leavePeriodData.startDate, leavePeriodData.endDate);
+
+                // Display the leave balance in the label
+                const leaveBalanceLabel = document.getElementById("leaveBalanceLabel");
+                leaveBalanceLabel.textContent = `Leave Balance: ${leaveDays} days`;
+                leaveBalanceLabel.style.display = "block"; // Show the label
+
+                // Display loader/feedback
+                const submitButton = form.querySelector("button[type='submit']");
+                submitButton.disabled = true;
+                submitButton.textContent = "Created"; 
+
+                // Hide the success message initially
+                const successMessage = document.getElementById("successMessage");
+                successMessage.style.display = "none";
+
+                try {
+                    // Send the data to the server
+                    const response = await fetch('https://localhost:7160/api/LeaveManagement/CreateLeavePeriod', {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            ...leavePeriodData,
+                            leaveDays // Send the calculated leave days along with other data
+                        })
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        // Show success message
+                        successMessage.textContent = `Leave period created successfully: ${result.message}`;
+                        successMessage.style.display = "block";
+                        form.reset(); // Clear the form
+
+                        // Change button text to "Created Successfully"
+                        submitButton.textContent = "Created Successfully";
+
+                        // Redirect to navigation page after a short delay (to show success message)
+                        setTimeout(() => {
+                            window.location.href = 'navigation.html'; // Navigate to the navigation page
+                        }, 2000); // 2-second delay before redirection
+                    } else {
+                        const error = await response.json();
+                        alert("Failed to create leave period: " + (error.message || "Unknown error occurred."));
+                    }
+                } catch (err) {
+                    console.error("Error while creating leave period:", err);
+                    alert("An error occurred while processing your request. Please try again later.");
+                } finally {
+                    // Restore button state after a delay to keep "Created Successfully" visible for a moment
+                    setTimeout(() => {
+                        submitButton.disabled = false;
+                        submitButton.textContent = "Create Leave Period";
+                    }); 
+                }
+            });
+        });
+    </script>
+</body>
+</html>
